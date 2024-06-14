@@ -3,7 +3,7 @@ using PkgServer, Sockets, Logging, LoggingExtras, Dates, FilesystemDatastructure
 
 # Accept optional environment-based arguments
 # Eventually, do this via Pkg preferences
-pkgserver = get(ENV, "JULIA_PKG_SERVER", "http://0.0.0.0:8000")
+const pkgserver = get(ENV, "JULIA_PKG_SERVER", "http://0.0.0.0:8000")
 try
     m = match(r"(https?://)?(.+):(\d+)", pkgserver)
     global host = m.captures[2]
@@ -14,11 +14,11 @@ catch
     global port = 8000
 end
 
-storage_root = get(ENV, "JULIA_PKG_SERVER_STORAGE_ROOT", "/tmp/pkgserver")
-storage_servers = strip.(split(get(ENV, "JULIA_PKG_SERVER_STORAGE_SERVERS", "https://us-east.storage.juliahub.com,https://kr.storage.juliahub.com"), ","))
-log_dir = get(ENV, "JULIA_PKG_SERVER_LOGS_DIR", joinpath(storage_root, "logs"))
-flavorless = get(ENV, "JULIA_PKG_SERVER_FLAVORLESS", "false")
-registry_update_period = parse(Float64, get(ENV, "JULIA_PKG_SERVER_REGISTRY_UPDATE_PERIOD", "1"))
+const storage_root = get(ENV, "JULIA_PKG_SERVER_STORAGE_ROOT", "/tmp/pkgserver")
+const storage_servers = strip.(split(get(ENV, "JULIA_PKG_SERVER_STORAGE_SERVERS", "https://us-east.storage.juliahub.com,https://kr.storage.juliahub.com"), ","))
+const log_dir = get(ENV, "JULIA_PKG_SERVER_LOGS_DIR", joinpath(storage_root, "logs"))
+const flavorless = get(ENV, "JULIA_PKG_SERVER_FLAVORLESS", "false")
+const registry_update_period = parse(Float64, get(ENV, "JULIA_PKG_SERVER_REGISTRY_UPDATE_PERIOD", "1"))
 
 dotflavors = [
     ".eager",
@@ -37,6 +37,8 @@ timestamp_logger(logger) = TransformerLogger(logger) do log
     merge(log, (; message = "[$(Dates.format(now(), date_format))] $(log.message)"))
 end
 
+const compress_logs = get(ENV, "JULIA_PKG_SERVER_COMPRESS_LOGS", "true") in ("True", "TRUE", "true")
+
 # Keep 10 days of logs
 let fc = NFileCache(log_dir, 10*24, DiscardLRU(); predicate = x -> endswith(x, r"pkgserver\.log(\.gz)?"))
     global function postrotate(file)
@@ -54,7 +56,7 @@ global_logger(TeeLogger(
             DatetimeRotatingFileLogger(
                 log_dir,
                 string(raw"yyyy-mm-dd-HH-\p\k\g\s\e\r\v\e\r.\l\o\g");
-                rotation_callback = postrotate,
+                rotation_callback = compress_logs ? postrotate : identity,
             ),
             Logging.Info,
         ),
